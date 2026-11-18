@@ -10,6 +10,7 @@ type Trade = { id: string; instrument: string; direction: "long" | "short"; stat
 
 const money = (n: number, currency = "USD") => new Intl.NumberFormat("en-US", { style: "currency", currency, maximumFractionDigits: 2 }).format(n);
 const marketLabels: Record<string, string> = { forex_cfd: "Forex / CFD", crypto_futures: "Crypto Futures", crypto_spot: "Crypto Spot", stocks_indices: "Stocks / Indices", other_futures: "Other Futures" };
+const brokerOptions = ["Valetax", "Exness", "HFM", "XM", "IC Markets", "Pepperstone", "FP Markets", "Octa", "FBS", "Binance", "Bybit", "OKX", "Bitget", "BingX", "MEXC", "Bitunix", "KuCoin", "Coinbase", "Deriv", "MetaTrader 4", "MetaTrader 5", "Other"];
 
 export default function Home() {
   const router = useRouter();
@@ -27,6 +28,7 @@ export default function Home() {
   const [accountName, setAccountName] = useState("");
   const [marketType, setMarketType] = useState("forex_cfd");
   const [broker, setBroker] = useState("");
+  const [showBrokerSuggestions, setShowBrokerSuggestions] = useState(false);
   const [currency, setCurrency] = useState("USD");
   const [accountMode, setAccountMode] = useState("live");
   const [instrument, setInstrument] = useState("XAUUSD");
@@ -106,6 +108,7 @@ export default function Home() {
   }
 
   const filtered = trades.filter(t => t.instrument.toLowerCase().includes(search.toLowerCase()) || t.direction.includes(search.toLowerCase()));
+  const filteredBrokers = brokerOptions.filter(name => name.toLowerCase().includes(broker.trim().toLowerCase()));
   const closedTrades = trades.filter(t => t.status === "closed" && t.net_pnl !== null);
   const net = closedTrades.reduce((sum, t) => sum + Number(t.net_pnl ?? 0), 0);
   const wins = closedTrades.filter(t => Number(t.net_pnl) > 0).length;
@@ -146,7 +149,15 @@ export default function Home() {
           <footer>Tradefolio · Trading Journal Platform <span>Fondasi database aktif</span></footer>
         </div>
       </section>
-      {showAccount && <div className="overlay" onMouseDown={e => { if (e.target === e.currentTarget) setShowAccount(false); }}><form className="modal" onSubmit={createAccount}><div className="modal-head"><div><h2>Tambah akun trading</h2><p>Buat wadah untuk mengelompokkan transaksi.</p></div><button type="button" className="close" onClick={() => setShowAccount(false)}>×</button></div><label>Nama akun<input value={accountName} onChange={e => setAccountName(e.target.value)} required placeholder="Contoh: Valetax Live 01"/></label><label>Jenis market<select value={marketType} onChange={e => setMarketType(e.target.value)}>{Object.entries(marketLabels).map(([v,l]) => <option value={v} key={v}>{l}</option>)}</select></label><label>Broker / Exchange<input value={broker} onChange={e => setBroker(e.target.value)} placeholder="Contoh: Valetax, Exness, Binance"/></label><label>Mata uang akun<input value={currency} onChange={e => setCurrency(e.target.value)} required maxLength={8}/></label><label>Mode akun<select value={accountMode} onChange={e => setAccountMode(e.target.value)}><option value="live">Live</option><option value="demo">Demo</option><option value="forward_test">Forward Test</option></select></label><div className="modal-actions"><button type="button" className="secondary" onClick={() => setShowAccount(false)}>Batal</button><button className="primary" type="submit" disabled={busy}>{busy ? "Menyimpan..." : "Simpan akun"}</button></div></form></div>}
+      {showAccount && <div className="overlay" onMouseDown={e => { if (e.target === e.currentTarget) setShowAccount(false); }}><form className="modal" onSubmit={createAccount}><div className="modal-head"><div><h2>Tambah akun trading</h2><p>Buat wadah untuk mengelompokkan transaksi.</p></div><button type="button" className="close" onClick={() => setShowAccount(false)}>×</button></div><label>Nama akun<input value={accountName} onChange={e => setAccountName(e.target.value)} required placeholder="Contoh: Valetax Live 01"/></label><label>Jenis market<select value={marketType} onChange={e => setMarketType(e.target.value)}>{Object.entries(marketLabels).map(([v,l]) => <option value={v} key={v}>{l}</option>)}</select></label><label>Broker / Exchange
+          <div style={{position:"relative"}}>
+            <input value={broker} onFocus={() => setShowBrokerSuggestions(true)} onChange={e => { setBroker(e.target.value); setShowBrokerSuggestions(true); }} placeholder="Cari atau ketik nama broker..." autoComplete="off" />
+            {showBrokerSuggestions && <div style={{position:"absolute",zIndex:30,top:"calc(100% + 4px)",left:0,right:0,maxHeight:190,overflowY:"auto",background:"#fff",border:"1px solid #dfe3e8",borderRadius:10,boxShadow:"0 8px 24px rgba(20,30,50,.12)"}}>
+              {filteredBrokers.length ? filteredBrokers.map(name => <button type="button" key={name} onClick={() => { setBroker(name === "Other" ? "" : name); setShowBrokerSuggestions(false); }} style={{display:"block",width:"100%",textAlign:"left",padding:"11px 14px",border:0,borderBottom:"1px solid #eef0f3",background:"#fff",color:"#263244"}}>{name === "Other" ? "＋ Broker lain (ketik sendiri)" : name}</button>) : <div style={{padding:"12px 14px",color:"#64748b",fontSize:14}}>Tidak ada dalam daftar. Nama yang kamu ketik tetap bisa disimpan.</div>}
+            </div>}
+          </div>
+          <small style={{display:"block",marginTop:5,color:"#7b8492",fontWeight:400}}>Pilih saran atau ketik nama broker/exchange sendiri.</small>
+        </label><label>Mata uang akun<input value={currency} onChange={e => setCurrency(e.target.value)} required maxLength={8}/></label><label>Mode akun<select value={accountMode} onChange={e => setAccountMode(e.target.value)}><option value="live">Live</option><option value="demo">Demo</option><option value="forward_test">Forward Test</option></select></label><div className="modal-actions"><button type="button" className="secondary" onClick={() => setShowAccount(false)}>Batal</button><button className="primary" type="submit" disabled={busy}>{busy ? "Menyimpan..." : "Simpan akun"}</button></div></form></div>}
       {showTrade && <div className="overlay" onMouseDown={e => { if (e.target === e.currentTarget) setShowTrade(false); }}><form className="modal" onSubmit={createTrade}><div className="modal-head"><div><h2>Catat transaksi</h2><p>Masukkan data trade yang sudah dilakukan.</p></div><button type="button" className="close" onClick={() => setShowTrade(false)}>×</button></div><label>Akun trading<select value={accountId} onChange={e => setAccountId(e.target.value)} required>{accounts.map(a => <option value={a.id} key={a.id}>{a.account_name}</option>)}</select></label><label>Instrumen<input value={instrument} onChange={e => setInstrument(e.target.value)} required placeholder="XAUUSD / BTCUSDT"/></label><label>Direction<select value={direction} onChange={e => setDirection(e.target.value as "long" | "short")}><option value="long">Long</option><option value="short">Short</option></select></label><label>Strategi (opsional)<select value={strategyId} onChange={e => setStrategyId(e.target.value)}><option value="">Belum dipilih</option>{strategies.map(s => <option key={s.id} value={s.id}>{s.strategy_name}</option>)}</select></label><label>Waktu buka<input type="datetime-local" value={openedAt} onChange={e => setOpenedAt(e.target.value)} required/></label><label>Status<select value={status} onChange={e => setStatus(e.target.value)}><option value="closed">Closed</option><option value="open">Open</option></select></label>{status === "closed" && <><label>Net P/L<input type="number" step="0.01" value={pnl} onChange={e => setPnl(e.target.value)} required/></label><label>Mata uang P/L<input value={pnlCurrency} onChange={e => setPnlCurrency(e.target.value)} required maxLength={8}/></label></>}<div className="modal-actions"><button type="button" className="secondary" onClick={() => setShowTrade(false)}>Batal</button><button className="primary" type="submit" disabled={busy}>{busy ? "Menyimpan..." : "Simpan transaksi"}</button></div><p className="modal-note">Ini pencatatan manual. Integrasi broker/exchange akan dibuat pada tahap berikutnya.</p></form></div>}
     </main>
   );
