@@ -69,7 +69,7 @@ create table if not exists public.trades (
   constraint trades_account_owner_fk foreign key (trading_account_id, user_id)
     references public.trading_accounts(id, user_id) on delete cascade,
   constraint trades_strategy_owner_fk foreign key (strategy_id, user_id)
-    references public.strategies(id, user_id) on delete set null,
+    references public.strategies(id, user_id) on delete restrict,
   check (closed_at is null or closed_at >= opened_at)
 );
 
