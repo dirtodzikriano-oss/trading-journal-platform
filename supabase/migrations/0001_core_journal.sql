@@ -66,6 +66,7 @@ create table if not exists public.trades (
   notes text,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
+  constraint trades_id_user_unique unique (id, user_id),
   constraint trades_account_owner_fk foreign key (trading_account_id, user_id)
     references public.trading_accounts(id, user_id) on delete cascade,
   constraint trades_strategy_owner_fk foreign key (strategy_id, user_id)
