@@ -4,13 +4,13 @@ import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 
-type Account = { id: string; account_name: string; market_type: string; broker_name: string | null; account_currency: string; account_mode: string };
+type Account = { id: string; account_name: string; market_type: string; broker_name: string | null; broker_server?: string | null; platform?: string | null; account_number?: string | null; account_currency: string; account_mode: string };
+type BrokerOption = { id: string; broker_name: string; owner_user_id: string | null };
 type Strategy = { id: string; strategy_name: string };
 type Trade = { id: string; instrument: string; direction: "long" | "short"; status: string; opened_at: string; closed_at: string | null; net_pnl: number | null; pnl_currency: string; trading_account_id: string; strategy_id: string | null };
 
 const money = (n: number, currency = "USD") => new Intl.NumberFormat("en-US", { style: "currency", currency, maximumFractionDigits: 2 }).format(n);
-const marketLabels: Record<string, string> = { forex_cfd: "Forex / CFD", crypto_futures: "Crypto Futures", crypto_spot: "Crypto Spot", stocks_indices: "Stocks / Indices", other_futures: "Other Futures" };
-const brokerOptions = ["Valetax", "Exness", "HFM", "XM", "IC Markets", "Pepperstone", "FP Markets", "Octa", "FBS", "Binance", "Bybit", "OKX", "Bitget", "BingX", "MEXC", "Bitunix", "KuCoin", "Coinbase", "Deriv", "MetaTrader 4", "MetaTrader 5", "Other"];
+const marketLabels: Record<string, string> = { cfd: "CFD (Forex, Commodities, Indices, Stock CFDs)", crypto_futures: "Crypto Futures" };
 
 export default function Home() {
   const router = useRouter();
@@ -26,10 +26,17 @@ export default function Home() {
   const [showAccount, setShowAccount] = useState(false);
   const [showTrade, setShowTrade] = useState(false);
   const [accountName, setAccountName] = useState("");
-  const [marketType, setMarketType] = useState("forex_cfd");
+  const [marketType, setMarketType] = useState("cfd");
   const [broker, setBroker] = useState("");
+  const [brokerId, setBrokerId] = useState<string | null>(null);
+  const [brokerResults, setBrokerResults] = useState<BrokerOption[]>([]);
   const [showBrokerSuggestions, setShowBrokerSuggestions] = useState(false);
-  const [currency, setCurrency] = useState("USD");
+  const [accountNumber, setAccountNumber] = useState("");
+  const [platform, setPlatform] = useState("MT5");
+  const [brokerServer, setBrokerServer] = useState("");
+  const [serverResults, setServerResults] = useState<Array<{id:string;server_name:string;environment:string;is_verified:boolean}>>([]);
+  const [showServerSuggestions, setShowServerSuggestions] = useState(false);
+  const [currency, setCurrency] = useState("");
   const [accountMode, setAccountMode] = useState("live");
   const [instrument, setInstrument] = useState("XAUUSD");
   const [direction, setDirection] = useState<"long" | "short">("long");
@@ -71,13 +78,23 @@ export default function Home() {
     setBusy(true); setError(""); setNotice("");
     const { data: authData } = await supabase.auth.getUser();
     if (!authData.user) { router.replace("/login"); return; }
+    if (!/^[A-Z]{3}$/.test(currency.trim().toUpperCase())) { setBusy(false); setError("Mata uang harus berupa kode 3 huruf, misalnya USD atau EUR."); return; }
+    let resolvedBrokerId = brokerId;
+    if (broker.trim() && !resolvedBrokerId) {
+      const normalized = broker.trim().toLowerCase().replace(/\s+/g, " ");
+      const { data: createdBroker, error: brokerError } = await supabase.from("brokers").insert({ owner_user_id: authData.user.id, broker_name: broker.trim(), normalized_name: normalized }).select("id").single();
+      if (brokerError || !createdBroker) { setBusy(false); setError("Direktori broker belum siap atau broker gagal disimpan. Pastikan Migration 0003 sudah dijalankan. Detail: " + (brokerError?.message ?? "Data broker tidak ditemukan.")); return; }
+      resolvedBrokerId = createdBroker.id;
+    }
     const { error: insertError } = await supabase.from("trading_accounts").insert({
       user_id: authData.user.id, account_name: accountName.trim(), market_type: marketType,
-      broker_name: broker.trim() || null, account_currency: currency.toUpperCase(), account_mode: accountMode
+      broker_name: broker.trim() || null, broker_id: resolvedBrokerId, broker_server: brokerServer.trim() || null,
+      account_number: accountNumber.trim() || null, platform: platform,
+      account_currency: currency.trim().toUpperCase(), account_currency_source: "user_input", account_currency_status: "user_confirmed", account_mode: accountMode
     });
     setBusy(false);
-    if (insertError) { setError(insertError.message); return; }
-    setAccountName(""); setBroker(""); setShowAccount(false); setNotice("Akun trading berhasil disimpan.");
+    if (insertError) { setError("Akun belum tersimpan. Pastikan Migration 0003 sudah dijalankan. Detail: " + insertError.message); return; }
+    setAccountName(""); setBroker(""); setBrokerId(null); setAccountNumber(""); setBrokerServer(""); setCurrency(""); setShowAccount(false); setNotice("Akun trading berhasil disimpan.");
     await loadData();
   }
 
@@ -115,7 +132,6 @@ export default function Home() {
   }
 
   const filtered = trades.filter(t => t.instrument.toLowerCase().includes(search.toLowerCase()) || t.direction.includes(search.toLowerCase()));
-  const filteredBrokers = brokerOptions.filter(name => name.toLowerCase().includes(broker.trim().toLowerCase()));
   const closedTrades = trades.filter(t => t.status === "closed" && t.net_pnl !== null);
   const net = closedTrades.reduce((sum, t) => sum + Number(t.net_pnl ?? 0), 0);
   const wins = closedTrades.filter(t => Number(t.net_pnl) > 0).length;
@@ -158,13 +174,15 @@ export default function Home() {
       </section>
       {showAccount && <div className="overlay" onMouseDown={e => { if (e.target === e.currentTarget) setShowAccount(false); }}><form className="modal" onSubmit={createAccount}><div className="modal-head"><div><h2>Tambah akun trading</h2><p>Buat wadah untuk mengelompokkan transaksi.</p></div><button type="button" className="close" onClick={() => setShowAccount(false)}>×</button></div><label>Nama akun<input value={accountName} onChange={e => setAccountName(e.target.value)} required placeholder="Contoh: Valetax Live 01"/></label><label>Jenis market<select value={marketType} onChange={e => setMarketType(e.target.value)}>{Object.entries(marketLabels).map(([v,l]) => <option value={v} key={v}>{l}</option>)}</select></label><label>Broker / Exchange
           <div style={{position:"relative"}}>
-            <input value={broker} onFocus={() => setShowBrokerSuggestions(true)} onChange={e => { setBroker(e.target.value); setShowBrokerSuggestions(true); }} placeholder="Cari atau ketik nama broker..." autoComplete="off" />
+            <input value={broker} onFocus={async () => { setShowBrokerSuggestions(true); if (broker.trim()) { const {data} = await supabase.from("brokers").select("id,broker_name,owner_user_id").ilike("broker_name", `%${broker.trim()}%`).eq("is_active", true).limit(12); setBrokerResults((data ?? []) as BrokerOption[]); } }} onChange={async e => { const value=e.target.value; setBroker(value); setBrokerId(null); setShowBrokerSuggestions(true); if (value.trim().length >= 1) { const {data} = await supabase.from("brokers").select("id,broker_name,owner_user_id").ilike("broker_name", `%${value.trim()}%`).eq("is_active", true).order("broker_name").limit(12); setBrokerResults((data ?? []) as BrokerOption[]); } else { setBrokerResults([]); } }} placeholder="Cari nama broker..." autoComplete="off" />
             {showBrokerSuggestions && <div style={{position:"absolute",zIndex:30,top:"calc(100% + 4px)",left:0,right:0,maxHeight:190,overflowY:"auto",background:"#fff",border:"1px solid #dfe3e8",borderRadius:10,boxShadow:"0 8px 24px rgba(20,30,50,.12)"}}>
-              {filteredBrokers.length ? filteredBrokers.map(name => <button type="button" key={name} onClick={() => { setBroker(name === "Other" ? "" : name); setShowBrokerSuggestions(false); }} style={{display:"block",width:"100%",textAlign:"left",padding:"11px 14px",border:0,borderBottom:"1px solid #eef0f3",background:"#fff",color:"#263244"}}>{name === "Other" ? "＋ Broker lain (ketik sendiri)" : name}</button>) : <div style={{padding:"12px 14px",color:"#64748b",fontSize:14}}>Tidak ada dalam daftar. Nama yang kamu ketik tetap bisa disimpan.</div>}
+              {brokerResults.map(item => <button type="button" key={item.id} onClick={() => { setBroker(item.broker_name); setBrokerId(item.id); setShowBrokerSuggestions(false); }} style={{display:"block",width:"100%",textAlign:"left",padding:"11px 14px",border:0,borderBottom:"1px solid #eef0f3",background:"#fff",color:"#263244"}}>{item.broker_name}</button>)}
+              <div style={{padding:"10px 14px",color:"#64748b",fontSize:13}}>{brokerResults.length ? "Pilih broker di atas atau gunakan nama baru." : "Belum ditemukan. Nama baru dapat ditambahkan sebagai entri pribadi."}</div>
             </div>}
           </div>
-          <small style={{display:"block",marginTop:5,color:"#7b8492",fontWeight:400}}>Pilih saran atau ketik nama broker/exchange sendiri.</small>
-        </label><label>Mata uang akun<input value={currency} onChange={e => setCurrency(e.target.value)} required maxLength={8}/></label><label>Mode akun<select value={accountMode} onChange={e => setAccountMode(e.target.value)}><option value="live">Live</option><option value="demo">Demo</option><option value="forward_test">Forward Test</option></select></label><div className="modal-actions"><button type="button" className="secondary" onClick={() => setShowAccount(false)}>Batal</button><button className="primary" type="submit" disabled={busy}>{busy ? "Menyimpan..." : "Simpan akun"}</button></div></form></div>}
+          <small style={{display:"block",marginTop:5,color:"#7b8492",fontWeight:400}}>Pencarian mengambil data dari direktori broker Tradefolio.</small>
+        </label><label>Platform<select value={platform} onChange={e => {setPlatform(e.target.value);setBrokerServer("");setServerResults([]);}}><option>MT5</option><option>MT4</option><option>cTrader</option><option>Binance API</option><option>Bybit API</option><option>OKX API</option><option>Other</option></select></label><label>Broker Server (opsional)
+          <div style={{position:"relative"}}><input value={brokerServer} onFocus={async () => {setShowServerSuggestions(true);if(brokerId){const {data}=await supabase.from("broker_servers").select("id,server_name,environment,is_verified").eq("broker_id",brokerId).eq("platform",platform).eq("is_active",true).limit(20);setServerResults(data ?? []);}}} onChange={async e => {const value=e.target.value;setBrokerServer(value);setShowServerSuggestions(true);if(brokerId){let q=supabase.from("broker_servers").select("id,server_name,environment,is_verified").eq("broker_id",brokerId).eq("platform",platform).eq("is_active",true);if(value.trim())q=q.ilike("server_name",`%${value.trim()}%`);const {data}=await q.limit(20);setServerResults(data ?? []);}}} placeholder="Contoh: ValetaxIntl-Live2" autoComplete="off"/>{showServerSuggestions && <div style={{position:"absolute",zIndex:30,top:"calc(100% + 4px)",left:0,right:0,maxHeight:160,overflowY:"auto",background:"#fff",border:"1px solid #dfe3e8",borderRadius:10}}>{serverResults.map(item=><button type="button" key={item.id} onClick={()=>{setBrokerServer(item.server_name);setShowServerSuggestions(false);}} style={{display:"block",width:"100%",textAlign:"left",padding:"10px 14px",border:0,background:"#fff",color:"#263244"}}>{item.server_name} · {item.environment}{item.is_verified ? " · Verified" : " · Unverified"}</button>)}{!serverResults.length && <div style={{padding:12,fontSize:13,color:"#64748b"}}>Server belum terdaftar. Kamu tetap bisa mengetik nama server secara manual.</div>}</div>}</div></label><label>Nomor akun (opsional)<input value={accountNumber} onChange={e => setAccountNumber(e.target.value)} placeholder="Nomor akun trading"/></label><label>Mata uang akun<input value={currency} onChange={e => setCurrency(e.target.value.toUpperCase())} required maxLength={3} placeholder="Contoh: USD"/></label><label>Mode akun<select value={accountMode} onChange={e => setAccountMode(e.target.value)}><option value="live">Live</option><option value="demo">Demo</option><option value="forward_test">Forward Test</option></select></label><div className="modal-actions"><button type="button" className="secondary" onClick={() => setShowAccount(false)}>Batal</button><button className="primary" type="submit" disabled={busy}>{busy ? "Menyimpan..." : "Simpan akun"}</button></div></form></div>}
       {showTrade && <div className="overlay" onMouseDown={e => { if (e.target === e.currentTarget) setShowTrade(false); }}><form className="modal" onSubmit={createTrade}><div className="modal-head"><div><h2>Catat transaksi</h2><p>Masukkan data trade yang sudah dilakukan.</p></div><button type="button" className="close" onClick={() => setShowTrade(false)}>×</button></div><label>Akun trading<select value={accountId} onChange={e => setAccountId(e.target.value)} required>{accounts.map(a => <option value={a.id} key={a.id}>{a.account_name}</option>)}</select></label><label>Instrumen<input value={instrument} onChange={e => setInstrument(e.target.value)} required placeholder="XAUUSD / BTCUSDT"/></label><label>Direction<select value={direction} onChange={e => setDirection(e.target.value as "long" | "short")}><option value="long">Long</option><option value="short">Short</option></select></label><label>Strategi (opsional)<select value={strategyId} onChange={e => setStrategyId(e.target.value)}><option value="">Belum dipilih</option>{strategies.map(s => <option key={s.id} value={s.id}>{s.strategy_name}</option>)}</select></label><label>Waktu buka<input type="datetime-local" value={openedAt} onChange={e => setOpenedAt(e.target.value)} required/></label><label>Status<select value={status} onChange={e => setStatus(e.target.value)}><option value="closed">Closed</option><option value="open">Open</option></select></label>{status === "closed" && <><label>Net P/L<input type="number" step="0.01" value={pnl} onChange={e => setPnl(e.target.value)} required/></label><label>Mata uang P/L<input value={pnlCurrency} onChange={e => setPnlCurrency(e.target.value)} required maxLength={8}/></label></>}<div className="modal-actions"><button type="button" className="secondary" onClick={() => setShowTrade(false)}>Batal</button><button className="primary" type="submit" disabled={busy}>{busy ? "Menyimpan..." : "Simpan transaksi"}</button></div><p className="modal-note">Ini pencatatan manual. Integrasi broker/exchange akan dibuat pada tahap berikutnya.</p></form></div>}
     </main>
   );
