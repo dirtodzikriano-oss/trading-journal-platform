@@ -79,6 +79,13 @@ export default function Home() {
 
   useEffect(() => { void loadData(); }, [loadData]);
 
+  useEffect(() => {
+    if (!showAccount) return;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => { document.body.style.overflow = previousOverflow; };
+  }, [showAccount]);
+
   async function createAccount(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setBusy(true); setError(""); setNotice("");
