@@ -225,7 +225,7 @@ returns trigger
 language plpgsql
 security definer
 set search_path = ''
-as $
+as $function$
 declare
   broker_owner uuid;
   server_owner uuid;
@@ -251,7 +251,7 @@ begin
   end if;
   return new;
 end;
-$;
+$function$;
 
 drop trigger if exists trading_accounts_validate_directory_refs on public.trading_accounts;
 create trigger trading_accounts_validate_directory_refs
