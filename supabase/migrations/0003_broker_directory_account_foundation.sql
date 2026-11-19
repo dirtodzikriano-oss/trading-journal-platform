@@ -93,7 +93,7 @@ alter table public.trading_accounts
   add constraint trading_accounts_broker_server_broker_fk
   foreign key (broker_server_id, broker_id)
   references public.broker_servers(id, broker_id)
-  on delete set null;
+  on delete restrict;
 
 alter table public.trading_accounts
   add constraint trading_accounts_currency_format_check
