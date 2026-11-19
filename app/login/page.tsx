@@ -61,8 +61,7 @@ export default function LoginPage() {
 
   const title = mode === "login" ? "Selamat datang kembali"
     : mode === "signup" ? "Buat akun Tradefolio"
-    : mode === "forgot" ? "Lupa kata sandi?"
-    : "Reset kata sandi";
+    : "Lupa kata sandi?";
 
   const description = mode === "login" ? "Masuk untuk mengelola jurnal trading dan analitik pribadi."
     : mode === "signup" ? "Daftar untuk mulai mengelola jurnal trading kamu."
@@ -118,8 +117,6 @@ export default function LoginPage() {
           </>}
           {mode === "signup" && <p>Sudah punya akun? <button type="button" onClick={() => changeMode("login")}>Masuk</button></p>}
           {mode === "forgot" && <p>Ingat kata sandi? <button type="button" onClick={() => changeMode("login")}>Kembali ke Sign In</button></p>}
-            setBusy(true); setMessage("");
-            setBusy(false);
         </div>
       </section>
     </main>
