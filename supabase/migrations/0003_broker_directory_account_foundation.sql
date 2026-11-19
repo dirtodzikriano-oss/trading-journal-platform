@@ -194,6 +194,46 @@ create policy broker_servers_delete_own on public.broker_servers
 grant select, insert, update, delete on public.brokers to authenticated;
 grant select, insert, update, delete on public.broker_servers to authenticated;
 
+-- Prevent accounts from referencing another user's private broker/server records.
+create or replace function public.validate_trading_account_directory_refs()
+returns trigger
+language plpgsql
+security definer
+set search_path = ''
+as $
+declare
+  broker_owner uuid;
+  server_owner uuid;
+  server_broker uuid;
+begin
+  if new.broker_id is not null then
+    select b.owner_user_id into broker_owner
+    from public.brokers b where b.id = new.broker_id;
+    if not found or (broker_owner is not null and broker_owner <> new.user_id) then
+      raise exception 'Broker directory entry is not available to this account owner';
+    end if;
+  end if;
+
+  if new.broker_server_id is not null then
+    select bs.owner_user_id, bs.broker_id
+      into server_owner, server_broker
+    from public.broker_servers bs where bs.id = new.broker_server_id;
+    if not found
+      or (server_owner is not null and server_owner <> new.user_id)
+      or (new.broker_id is not null and server_broker <> new.broker_id) then
+      raise exception 'Broker server entry is not available to this account owner';
+    end if;
+  end if;
+  return new;
+end;
+$;
+
+drop trigger if exists trading_accounts_validate_directory_refs on public.trading_accounts;
+create trigger trading_accounts_validate_directory_refs
+before insert or update of user_id, broker_id, broker_server_id
+on public.trading_accounts
+for each row execute procedure public.validate_trading_account_directory_refs();
+
 -- No passwords, investor passwords, API keys, API secrets, or passphrases
 -- are stored in these directory/account tables. Credential vaulting is a
 -- separate security-reviewed integration phase.
