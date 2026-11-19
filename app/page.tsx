@@ -102,7 +102,14 @@ export default function Home() {
   }
 
   async function logout() {
-    await supabase.auth.signOut();
+    setBusy(true);
+    setError("");
+    const { error: signOutError } = await supabase.auth.signOut({ scope: "local" });
+    setBusy(false);
+    if (signOutError) {
+      setError("Logout gagal: " + signOutError.message + ". Coba muat ulang halaman.");
+      return;
+    }
     router.replace("/login");
     router.refresh();
   }
@@ -129,7 +136,7 @@ export default function Home() {
         <div className="sidebar-bottom"><div className="help-card"><b>Trading Journal</b><p>Catat transaksi dan evaluasi performa trading secara terstruktur.</p><span>Data tersimpan di Supabase</span></div><div className="user"><span className="user-avatar">TR</span><span><b>{email || "Trader"}</b><small>Personal account</small></span></div></div>
       </aside>
       <section className="main">
-        <header className="topbar"><div className="crumb">Workspace <span>/</span> <b>Overview</b></div><div className="top-right"><span className="status-dot"/> Connected <button className="secondary" onClick={logout}>Keluar</button></div></header>
+        <header className="topbar"><div className="crumb">Workspace <span>/</span> <b>Overview</b></div><div className="top-right"><span className="status-dot"/> Connected <button className="secondary" onClick={logout} disabled={busy}>{busy ? "Memproses..." : "Keluar"}</button></div></header>
         <div className="content" id="overview">
           <div className="heading-row"><div><div className="eyebrow">TRADING WORKSPACE</div><h1>Trading Journal</h1><p>Data transaksi dan akun trading milikmu.</p></div><div style={{display:"flex",gap:8,flexWrap:"wrap"}}><button className="secondary" onClick={() => setShowAccount(true)}>＋ Tambah akun</button><button className="primary" onClick={() => { if (!accounts.length) { setError("Buat akun trading terlebih dahulu."); setShowAccount(true); } else { setAccountId(accounts[0].id); setShowTrade(true); } }}>＋ Catat trade</button></div></div>
           {error && <div className="demo-notice" style={{borderColor:"#f2c6c6",background:"#fff4f4",color:"#a33"}}>{error}</div>}
