@@ -42,6 +42,31 @@ create unique index if not exists brokers_user_normalized_name_uidx
 create index if not exists brokers_name_search_idx
   on public.brokers using gin (to_tsvector('simple', broker_name));
 
+-- Initial searchable directory entries. Broker/server connectivity is not implied
+-- by presence in this directory; server records are added only when verified.
+insert into public.brokers (owner_user_id, broker_name, normalized_name)
+values
+  (null, 'Valetax', 'valetax'),
+  (null, 'Exness', 'exness'),
+  (null, 'HFM', 'hfm'),
+  (null, 'XM', 'xm'),
+  (null, 'IC Markets', 'ic markets'),
+  (null, 'Pepperstone', 'pepperstone'),
+  (null, 'FP Markets', 'fp markets'),
+  (null, 'Octa', 'octa'),
+  (null, 'FBS', 'fbs'),
+  (null, 'Deriv', 'deriv'),
+  (null, 'Binance', 'binance'),
+  (null, 'Bybit', 'bybit'),
+  (null, 'OKX', 'okx'),
+  (null, 'Bitget', 'bitget'),
+  (null, 'BingX', 'bingx'),
+  (null, 'MEXC', 'mexc'),
+  (null, 'Bitunix', 'bitunix'),
+  (null, 'KuCoin', 'kucoin'),
+  (null, 'Coinbase', 'coinbase')
+on conflict (normalized_name) where owner_user_id is null do nothing;
+
 -- A broker can publish multiple servers across different platforms.
 -- User-submitted servers remain private to their owner.
 create table if not exists public.broker_servers (
